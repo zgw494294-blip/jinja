@@ -1105,7 +1105,11 @@ class Environment:
         """
         gs = self.make_globals(globals)
         cls = template_class or self.template_class
-        return cls.from_code(self, self.compile(source), gs, None)
+        rv = cls.from_code(self, self.compile(source), gs, None)
+        # Retain text source for features that compile a private variant of
+        # the template, such as render sessions.  AST input is not retained.
+        rv._rs_source = source if isinstance(source, str) else None
+        return rv
 
     def make_globals(
         self, d: t.MutableMapping[str, t.Any] | None
@@ -1268,6 +1272,25 @@ class Template:
         namespace["__jinja_template__"] = t
 
         return t
+
+    def render_session(
+        self, mapping: t.Mapping[str, t.Any] | None = None
+    ) -> "RenderSession":
+        """Create an independent, dependency aware render session.
+
+        The session is rendered once with *mapping* as its complete
+        context.  The returned object provides ``render()``, which returns
+        the current complete output, and ``update(mapping)``, which replaces
+        the whole context (omitted keys are deleted) and returns the newly
+        rendered string.  Filter, test and function calls whose inputs and
+        observed context reads did not change are reused instead of being
+        executed again.
+
+        See :class:`jinja2.RenderSession` for the details and limitations.
+        """
+        from .session import RenderSession
+
+        return RenderSession.start(self, mapping)
 
     def render(self, *args: t.Any, **kwargs: t.Any) -> str:
         """This method accepts the same arguments as the `dict` constructor:
